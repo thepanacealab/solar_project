@@ -1,4 +1,4 @@
-#branch of Michael's program
+#branch of Michael's program, where binary images are created
 
 from TrackImage import TrackImage 
 from GetFileData import GetFileData
@@ -101,12 +101,11 @@ ax.set_ylabel("Avg Y Change")
 plt.show()
 
 ############################################################################
-# the second part of k-means clustering will allow the user to pick a target group and have
-# those object bounding boxes highlighted on the image 
+
 os.chdir("/home/large_data/venus_work/binary_images/")
 target_class = 2
 for z,image_dup in enumerate(imgs):
-    copy_copy = np.zeros(shape=(4000,4000))
+    copy_copy = np.zeros(shape=(3080,3072))
     #copy_copy = copy.deepcopy(image_dup)
     #copy_copy = copy.deepcopy(img_copy)
     for index in range(0, len(k_obj.spot_dict)-1): 
