@@ -8,6 +8,7 @@ from astropy.io import fits
 from astropy.utils.data import get_pkg_data_filename
 import numpy as np
 import cv2
+import matplotlib.image as mpimg
 
 
 class dustDetection:
@@ -27,7 +28,8 @@ class dustDetection:
       hdul = fits.open(self.path+item)
       data = hdul[0].data
       image_flipped = np.flip(data,1)    
-      self.img_data[self.img_path_arr[i]] = image_flipped[0, :, :]      
+      self.img_data[self.img_path_arr[i]] = image_flipped[0, :, :]    
+    print('Number of images in path:', len(self.img_data))  
     print('Done!')
     
   def brighten(self, img_name, change, visible):
@@ -105,11 +107,13 @@ class dustDetection:
     list_all = os.listdir(path)
     for i, img in enumerate(list_all):
       image = Image.open(path+img).convert('L')
+      #image = mpimg.imread(path+img)
+      #gray = self.rgb2gray(image)
       #image_orig = cv2.imread(img);
       #image = cv2.cvtColor(image_orig, cv2.COLOR_BGR2GRAY)
       #image = self.rgb2gray(image_orig)
       if i == 0:
-        self.edge_detect_biary(image, 10, 3, visible)
+        self.edge_detect_biary(image, 6, 4, visible) #best=6,4
       else:
         continue
       '''cnt = 0
@@ -124,52 +128,78 @@ class dustDetection:
     #img = np.uint8(image)
     image2 = np.asarray(image1)
     #filter_size = 2*np.ceil(2*4)+1
-    image = gaussian_filter(image2,sigma=6)
+    image = gaussian_filter(image2,sigma=6, truncate=2) #sigma=6 also 4
     print('shape of image is ', image.shape)    
     m,n = image.shape
     image_mod = np.zeros(shape=[m,n])
-    # pixel_kernel = 10
     for i in range(pixel_kernel,m-pixel_kernel+1):
       for j in range(pixel_kernel,n-pixel_kernel+1):
         mat_1 = image[i-pixel_kernel:i+pixel_kernel,j-pixel_kernel:j+pixel_kernel]
-        #print(mat_1.shape)
-        count = len(mat_1[mat_1> image[i][j]])
-        #print([i],[j], count)
-        if (count >= (0.9 * pixel_kernel * pixel_kernel)):
-        #if count >= 90:
-          #print([i],[j], count)
+        count = len(mat_1[mat_1 > image[i,j]])
+        if (count >= (0.9 * 1.5 * pixel_kernel * pixel_kernel)):
           image_mod[i][j] = 0
         else:
           image_mod[i][j] = 255
     print('max is ', np.max(image_mod))
     print('min is ', np.min(image_mod))
-#    if visible:
-#      plt.figure(dpi=1200)
-#      plt.axis('off')
-#      plt.grid(b=None)
-#      plt.imshow(np.uint8(image_mod), cmap='gray')
-#      plt.title('Modified_0')
-#      plt.show()
-    image_mod_1 = image_mod
-    
-    for i in range(pixel_kernel_small, m-pixel_kernel_small):
-      for j in range(pixel_kernel_small, n-pixel_kernel_small):
-        if image_mod[i][j] == 0:
-          mat_2 = image_mod[i-pixel_kernel_small:i+pixel_kernel_small, j-pixel_kernel_small:j+pixel_kernel_small]
-          count1 = len(mat_2[mat_2 == image_mod[i][j]])
-          #if (count >= (pixel_kernel_small * pixel_kernel_small)):
-          if count >= 25:
-            image_mod_1[i][j] = 0
-          else:
-            image_mod_1[i][j] = 255
     if visible:
-      plt.figure(dpi=1200)
+      plt.figure(1)
       plt.axis('off')
       plt.grid(b=None)
-      plt.imshow(image_mod_1, cmap='gray')
+      plt.imshow(np.uint8(image_mod), cmap='gray')
+      plt.title('Modified_0')
+      plt.show()
+    
+    image_mod_1 = image_mod
+    print('initial min of image_mod_1 is ',np.min(image_mod_1))
+    print(image_mod_1.dtype)
+    count = 0
+    for i in range(pixel_kernel_small, m-pixel_kernel_small+1):
+      for j in range(pixel_kernel_small, n-pixel_kernel_small+1):
+        if image_mod[i][j] == 0:
+          mat_2 = image_mod[i-pixel_kernel_small:i+pixel_kernel_small, j-pixel_kernel_small:j+pixel_kernel_small]
+          count1 = len(mat_2[mat_2 < 255])
+          if count1 >= 25: 
+            count += 1
+            image_mod_1[i-1:i+1, j-1:j+1] = 0            
+          else:
+            image_mod_1[i-1:i+1, j-1:j+1] = 255           
+    if visible:
+      plt.figure(2)
+      plt.axis('off')
+      plt.grid(b=None)
+      plt.imshow(np.uint8(image_mod_1), cmap='gray')
       plt.title('Modified_1')
       plt.show()
+
+#  def rgb2gray(self, rgb):
+#    return np.dot(rgb[...,:3], [0.299, 0.587, 0.144])
+    
+  def average_dark(self,visible=0):
+    m,n=self.img_data[self.img_path_arr[0]].shape
+    avg_img=np.zeros((m,n))
+    for i in range(len(self.img_data)):
+#      if i < 4:
+      avg_img+=self.img_data[self.img_path_arr[i]]
+      print('number of iteration', i)
+    avg_img=avg_img/len(self.img_data)
+    #avg_img=avg_img/4
+    diff = self.img_data[self.img_path_arr[0]] - avg_img
+    if visible:
+      plt.figure()
+      plt.axis('off')
+      plt.grid(b=None)
+      plt.imshow(np.uint16(diff), cmap='gray')
+      plt.title('Difference image')
+      plt.show()
       
+      plt.figure()
+      plt.axis('off')
+      plt.grid(b=None)
+      plt.imshow(np.uint16(avg_img), cmap='gray')
+      plt.title('average')
+      plt.show()
+    return avg_img
       
       
       

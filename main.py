@@ -3,14 +3,14 @@ import cv2
 import numpy as np 
 import matplotlib.pyplot as plt
 
-path='/home/large_data/southpole_data/dmlab/solar/south-pole/K-0/2017/1/7/9/'
+path='/home/large_data/southpole_data/dmlab/solar/south-pole/K-0/2017/1/21/21/'
 path1= '/home/large_data/venus_work/temp_fits/'
 folder1=dustDetection(path)
-#folder1.extract_fits()
+folder1.extract_fits()
 #folder1.brighten_images(5, 0)
 #folder1.noise_remove_folder(0)
-folder1.edge_folder(path1, 1)
-
+#folder1.edge_folder(path1, 1)
+a=folder1.average_dark(1)
 '''
 
 
