@@ -8,13 +8,15 @@ from astropy.io import fits
 from astropy.utils.data import get_pkg_data_filename
 import numpy as np
 import cv2
+#import cv
 import matplotlib.image as mpimg
 
 
 class dustDetection:
 
-  def __init__(self, path_arr):
+  def __init__(self, path_arr, dest_path):
     self.path = path_arr
+    self.dest_path= dest_path
     self.img_path_arr = []
     self.img_data = dict()
     self.brightened = dict()
@@ -23,157 +25,147 @@ class dustDetection:
   def extract_fits(self):
     #print('Extracting all fits image details from:\n', self.path)
     print('Extracting all fits image details...')    
-    self.img_path_arr = os.listdir(self.path)
+    self.img_path_arr = sorted(os.listdir(self.path))
     for i,item in enumerate(self.img_path_arr):
+      #print(item)
       hdul = fits.open(self.path+item)
       data = hdul[0].data
       image_flipped = np.flip(data,1)    
-      self.img_data[self.img_path_arr[i]] = image_flipped[0, :, :]    
+      self.img_data[self.img_path_arr[i]] = image_flipped[0, :, :]         
     print('Number of images in path:', len(self.img_data))  
     print('Done!')
+    return self.img_data
     
-  def brighten(self, img_name, change, visible):
-    im1 = Image.fromarray(img_name)
-    im2 = im1.point(lambda p: p * change)
+  def brighten(self, img_name, visible=0):
+    im1 = np.uint16(img_name) 
+    plt.figure(dpi=1200)
+    plt.axis('off')
+    plt.grid(b=None)
+    plt.imshow(im1, cmap='gray')
+    plt.savefig('/home/large_data/venus_work/fits_code/im.png', dpi = 1200, pad_inches = 0, bbox_inches='tight')
+    plt.close()
+    im2 = cv2.imread('/home/large_data/venus_work/fits_code/im.png',0)
+    #im3= im2/np.linalg.norm(im2)
+    equ=cv2.equalizeHist(im2)
+    cv2.imwrite('res_one.png',equ)        
+    '''    
+    mean_bright = np.mean(np.asarray(im1))
+    #bright_val= 21000/mean_bright
+    print ('mean of original image: ', mean_bright)
+    max_bright = np.max(np.asarray(im1))
+    min_bright = np.min(np.asarray(im1))
+    print(max_bright)
+    print(min_bright)
+    #im2 = im1.point(lambda p: p * bright_val)
+    #mean_bright = np.mean(np.asarray(im2))
+    #print ('mean after brightening:', mean_bright)
+    #print ('Brightness increased by factor of: ', bright_val)
+    '''
     if visible:
       plt.figure(dpi=1200)
       plt.axis('off')
       plt.grid(b=None)
-      plt.imshow(im2, cmap='gray')
+      plt.imshow(equ, cmap='gray')
       plt.show()    
-    return np.asarray(im2)
+    return np.asarray(equ)
     
-  def noise_removal(self,item, visible):
+  def noise_removal(self,item, visible=0, cnt=0):
     f = np.fft.fft2(item)
     fshift=np.fft.fftshift(f)
     
     #calculate amplitude spectrum
-    mag_spec = 20*np.log(np.abs(fshift))    
+    #mag_spec = 20*np.log(np.abs(fshift))    
     r= f.shape[0]/2     # number of rows/2
     c=f.shape[1]/2      # number of columns/2
-    p=3
-    n=1 
+    p=1
+    n=2
     fshift2 = np.copy(fshift)    
     # suppress upper part 
     fshift2[int(r-p):int(r+p),0:int(c-n)] = 0.001
     # suppress lower part 
     fshift2[int(r-p):int(r+p), int(c+n):int(c+c)] = 0.001
     # calculate new amplitude spectrum
-    mag_spec2 = 20*np.log(np.abs(fshift2))
+    #mag_spec2 = 20*np.log(np.abs(fshift2))
     inv_fshift=np.fft.ifftshift(fshift2)
     # reconstructing image
     img_recon= np.real(np.fft.ifft2(inv_fshift))
+    plt.figure(dpi=1200)
+    plt.axis('off')
+    plt.grid(b=None)
+    plt.imshow(img_recon, cmap='gray')
+    plt.savefig(self.dest_path + "/file.png", dpi = 1200, pad_inches = 0, bbox_inches='tight')
+    plt.close()
     if visible:
       plt.figure(dpi=1200)
       plt.axis('off')
       plt.grid(b=None)
       plt.imshow(img_recon, cmap='gray')
       plt.show()
-    return img_recon  
+    img_idx = self.dest_path+'file.png'
+    count_noise=self.edge_detect_binary(img_idx)
+    os.remove(img_idx)
+    return img_recon,count_noise
     
-  def brighten_images(self, change = 5.0, visible=0):
+  def brighten_images(self, visible=0):
     print('Smoothening/Brightening the images...')
+    count=1
     for key, value in self.img_data.items():
-      self.brightened[key] = self.brighten(value, change, visible)
-    print('Done!')
+      if count == 1:
+        self.brightened[key] = self.brighten(value, visible)
+        count+=1
+      else:
+        break
+      print('Done!')
     
   def noise_remove_folder(self, visible=0):
     print('Removing noise from the images...')
-    for key, value in self.brightened.items():
-      self.noise_removed_array[key] = self.noise_removal(value, visible)
+    cnt = 1
+    tot = len(self.brightened)
+    for key, value in self.brightened.items():    
+      print('Current image: ', cnt, ' /', tot)
+      self.noise_removed_array[key] = self.noise_removal(value, visible, cnt)
+      cnt += 1
     print('Done!')
-    
-  def edge_detect(self, image, visible):
-    t = 100
-    img = np.uint8(image)
-    gray = cv2.cvtColor(src = img, code = cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(src = gray, ksize = (5, 5), sigmaX = 0)
-    (t, binary) = cv2.threshold(src = blur,thresh = t, maxval = 255, type = cv2.THRESH_BINARY)
-    (_, contours, _) = cv2.findContours(image = binary, mode = cv2.RETR_EXTERNAL,method = cv2.CHAIN_APPROX_SIMPLE)
-    print("Found %d objects." % len(contours))
-    for (i, c) in enumerate(contours):
-      print("\tSize of contour %d: %d" % (i, len(c)))
-#   format = np.uint8(image)
-#   edge_img = cv2.Canny(format,np.max(format)-100,np.max(format))
+       
+  def edge_detect_binary(self, image1, visible=0, ii=0):
+    print('Started creating contours..')
+    img1 = cv2.imread(image1, 0)
+    m,n = img1.shape
+    img = cv2.adaptiveThreshold(img1,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,201,3)
+    img = cv2.erode(img, None, iterations=2)
+    img = cv2.dilate(img, None, iterations=12)
+    cnts = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
+    img_canny = cv2.Canny(img,np.max(img)-100,np.max(img))
+    img_rgb = cv2.cvtColor(img1, cv2.COLOR_GRAY2RGB)
+    #print('rgb shape:', img_rgb.shape)
+    print('Filling red borders...')
+    for i in range(m):
+      for j in range(n):
+        if img_canny[i,j] == 255:
+          img_rgb[i,j,0] = 0
+          img_rgb[i,j,1] = 0
+          img_rgb[i,j,2] = 255      
+    print('Loop done!')
+    visible = 1 
     if visible:
       plt.figure(dpi=1200)
       plt.axis('off')
       plt.grid(b=None)
-      plt.imshow(edge_img, cmap='gray')
+      plt.imshow(np.uint8(img_rgb))
       plt.show()
-    return edge_img
-    
-  def edge_folder(self, path, visible):
-    list_all = os.listdir(path)
-    for i, img in enumerate(list_all):
-      image = Image.open(path+img).convert('L')
-      #image = mpimg.imread(path+img)
-      #gray = self.rgb2gray(image)
-      #image_orig = cv2.imread(img);
-      #image = cv2.cvtColor(image_orig, cv2.COLOR_BGR2GRAY)
-      #image = self.rgb2gray(image_orig)
-      if i == 0:
-        self.edge_detect_biary(image, 6, 4, visible) #best=6,4
-      else:
-        continue
-      '''cnt = 0
-      for key, value in self.noise_removed_array.items():
-        if cnt == 0:
-          self.edge_detect_biary(value, 10, 3, visible)
-          cnt += 1
-        else:
-          continue
-      '''
-  def edge_detect_biary(self, image1, pixel_kernel, pixel_kernel_small, visible):
-    #img = np.uint8(image)
-    image2 = np.asarray(image1)
-    #filter_size = 2*np.ceil(2*4)+1
-    image = gaussian_filter(image2,sigma=6, truncate=2) #sigma=6 also 4
-    print('shape of image is ', image.shape)    
-    m,n = image.shape
-    image_mod = np.zeros(shape=[m,n])
-    for i in range(pixel_kernel,m-pixel_kernel+1):
-      for j in range(pixel_kernel,n-pixel_kernel+1):
-        mat_1 = image[i-pixel_kernel:i+pixel_kernel,j-pixel_kernel:j+pixel_kernel]
-        count = len(mat_1[mat_1 > image[i,j]])
-        if (count >= (0.9 * 1.5 * pixel_kernel * pixel_kernel)):
-          image_mod[i][j] = 0
-        else:
-          image_mod[i][j] = 255
-    print('max is ', np.max(image_mod))
-    print('min is ', np.min(image_mod))
+      cv2.imwrite(self.dest_path+"edges/" + "colour_%03d.png" % ii, img_rgb)
+      plt.draw()
+      plt.close()
     if visible:
-      plt.figure(1)
+      plt.figure(dpi=1200)
       plt.axis('off')
       plt.grid(b=None)
-      plt.imshow(np.uint8(image_mod), cmap='gray')
-      plt.title('Modified_0')
+      plt.imshow(np.uint8(img), cmap='gray')
       plt.show()
-    
-    image_mod_1 = image_mod
-    print('initial min of image_mod_1 is ',np.min(image_mod_1))
-    print(image_mod_1.dtype)
-    count = 0
-    for i in range(pixel_kernel_small, m-pixel_kernel_small+1):
-      for j in range(pixel_kernel_small, n-pixel_kernel_small+1):
-        if image_mod[i][j] == 0:
-          mat_2 = image_mod[i-pixel_kernel_small:i+pixel_kernel_small, j-pixel_kernel_small:j+pixel_kernel_small]
-          count1 = len(mat_2[mat_2 < 255])
-          if count1 >= 25: 
-            count += 1
-            image_mod_1[i-1:i+1, j-1:j+1] = 0            
-          else:
-            image_mod_1[i-1:i+1, j-1:j+1] = 255           
-    if visible:
-      plt.figure(2)
-      plt.axis('off')
-      plt.grid(b=None)
-      plt.imshow(np.uint8(image_mod_1), cmap='gray')
-      plt.title('Modified_1')
-      plt.show()
-
-#  def rgb2gray(self, rgb):
-#    return np.dot(rgb[...,:3], [0.299, 0.587, 0.144])
+      cv2.imwrite(self.dest_path+"binary/"+"binarry_%03d.png" % ii, img)
+      plt.draw()
+      plt.close()
+    return len(cnts)
     
   def average_dark(self,visible=0):
     m,n=self.img_data[self.img_path_arr[0]].shape
@@ -200,6 +192,9 @@ class dustDetection:
       plt.title('average')
       plt.show()
     return avg_img
+
+    
+    
       
       
       
